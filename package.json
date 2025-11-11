@@ -1,12 +1,17 @@
 {
   "name": "object-hash-store",
-  "module": "index.ts",
-  "type": "module",
   "private": true,
-  "devDependencies": {
-    "@types/bun": "latest"
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run \"--filter=@hstore/*\" build",
+    "lint": "bun run \"--filter=@hstore/*\" lint",
+    "test": "bun run \"--filter=@hstore/*\" test"
   },
-  "peerDependencies": {
-    "typescript": "^5"
+  "devDependencies": {
+    "bun-types": "latest",
+    "typescript": "^5.6.3"
   }
 }
