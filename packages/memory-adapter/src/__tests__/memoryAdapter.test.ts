@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { StoredBlock } from "@hstore/core.legacy";
+import type { StoredBlock } from "@hstore/core";
 import { createMemoryAdapter } from "../memoryAdapter";
 
 const sampleBlock = (hash: string, seed: number = 0): StoredBlock => ({

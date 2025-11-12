@@ -1,116 +1,66 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "crypto";
 import { z } from "zod";
-import type { Hash, HashFn, StorageAdapter, StoredBlock } from "../index";
-import { createHasher, createStore, deserializeNode, persistJsonValue } from "../index";
-import type { PersistContext } from "../persist";
+
+import { createStore } from "../createStore";
 import type {
-  JsonArray,
-  JsonObject,
-  JsonPrimitive,
-  JsonValue
-} from "../types/json";
+  Hash,
+  HashFn,
+  StorageAdapter,
+  StoredBlock,
+} from "../types";
 
 type AdapterHarness = Readonly<{
   adapter: StorageAdapter;
-  dump: () => ReadonlyArray<StoredBlock>;
-  size: () => number;
+  dump: () => ReadonlyMap<Hash, StoredBlock>;
+  writes: () => number;
 }>;
 
 const sha256: HashFn = (input) =>
   createHash("sha256").update(input).digest("hex");
 
 const createAdapterHarness = (): AdapterHarness => {
-  const memory = new Map<string, StoredBlock>();
+  const memory = new Map<Hash, StoredBlock>();
+  let writeCount = 0;
 
   const read: StorageAdapter["read"] = async (hash) => memory.get(hash);
 
   const write: StorageAdapter["write"] = async (record) => {
     memory.set(record.hash, record);
+    writeCount += 1;
   };
 
   return {
     adapter: {
       read,
-      write
+      write,
     },
-    dump: () => [...memory.values()],
-    size: () => memory.size
+    dump: () => new Map(memory),
+    writes: () => writeCount,
   };
 };
 
-const createPersistContext = (adapter: StorageAdapter): PersistContext => ({
-  adapter,
-  hasher: createHasher(sha256),
-  hints: {
-    primitives: new Map<JsonPrimitive, Hash>(),
-    arrays: new WeakMap<JsonArray, Hash>(),
-    objects: new WeakMap<JsonObject, Hash>()
-  }
-});
-
-describe("persistJsonValue", () => {
-  test("persists primitives into a single node", async () => {
-    const harness = createAdapterHarness();
-    const context = createPersistContext(harness.adapter);
-    const result = await persistJsonValue("hello", context);
-
-    expect(result.writes).toBe(1);
-
-    const [stored] = harness.dump();
-    expect(deserializeNode(stored.bytes)).toEqual({
-      kind: "primitive",
-      value: "hello"
-    });
-  });
-
-  test("reuses hashes for identical objects across calls", async () => {
-    const harness = createAdapterHarness();
-    const context = createPersistContext(harness.adapter);
-
-    const first = await persistJsonValue(
-      {
-        foo: "bar",
-        nested: { value: 42 }
-      },
-      context
-    );
-
-    const second = await persistJsonValue(
-      {
-        foo: "bar",
-        nested: { value: 42 }
-      },
-      context
-    );
-
-    expect(first.hash).toBe(second.hash);
-    expect(second.writes).toBe(0);
-    expect(harness.size()).toBeGreaterThan(0);
-  });
-});
+const schema = z
+  .object({
+    message: z.string(),
+    data: z.array(z.number()),
+    details: z.object({ nested: z.boolean() }),
+  })
+  .strict();
 
 describe("createStore", () => {
-  const schema = z
-    .object({
-      message: z.string(),
-      data: z.array(z.number()),
-      details: z.object({ nested: z.boolean() })
-    })
-    .strict();
-
-  test("commit returns immutable versions and updates head", async () => {
+  test("commit returns frozen versions and updates head", async () => {
     const harness = createAdapterHarness();
     const store = createStore({
       hashFn: sha256,
       adapter: harness.adapter,
-      schema
+      schema,
     });
 
     const version = await store.commit({
       message: "hello",
       data: [1, 2, 3],
-      details: { nested: true }
+      details: { nested: true },
     });
 
     expect(version.previous).toBeNull();
@@ -118,8 +68,9 @@ describe("createStore", () => {
     expect(version.value).toEqual({
       message: "hello",
       data: [1, 2, 3],
-      details: { nested: true }
+      details: { nested: true },
     });
+
     expect(Object.isFrozen(version.value)).toBe(true);
     expect(Object.isFrozen(version.value.data)).toBe(true);
     expect(Object.isFrozen(version.value.details)).toBe(true);
@@ -134,19 +85,19 @@ describe("createStore", () => {
     const store = createStore({
       hashFn: sha256,
       adapter: harness.adapter,
-      schema
+      schema,
     });
 
     const first = await store.commit({
       message: "initial",
       data: [1, 2],
-      details: { nested: true }
+      details: { nested: true },
     });
 
     const secondPayload = {
       message: "initial",
       data: [...first.value.data, 3],
-      details: { nested: false }
+      details: { nested: false },
     };
 
     const second = await store.commit(secondPayload);
@@ -168,7 +119,7 @@ describe("createStore", () => {
     const store = createStore({
       hashFn: sha256,
       adapter: harness.adapter,
-      schema
+      schema,
     });
 
     const result = await store.get("missing" as Hash);
@@ -180,31 +131,35 @@ describe("createStore", () => {
     const store = createStore({
       hashFn: sha256,
       adapter: harness.adapter,
-      schema
+      schema,
     });
 
     await expect(
       store.commit({
         message: "invalid",
         data: [1, 2],
-        details: { nested: "nope" }
+        details: { nested: "nope" },
       } as unknown as z.infer<typeof schema>)
     ).rejects.toThrow();
   });
-});
 
-describe("createHasher", () => {
-  test("hashValue matches stored state hash", async () => {
-    const value: JsonValue = { payload: ["a", "b", "c"] };
-    const hasher = createHasher(sha256);
-
-    const hashFromValue = await hasher.hashValue(value);
-
+  test("stores head pointer alongside persisted versions", async () => {
     const harness = createAdapterHarness();
-    const context: PersistContext = createPersistContext(harness.adapter);
-    const persisted = await persistJsonValue(value, context);
+    const store = createStore({
+      hashFn: sha256,
+      adapter: harness.adapter,
+      schema,
+    });
 
-    expect(hashFromValue).toBe(persisted.hash);
+    await store.commit({
+      message: "persist",
+      data: [],
+      details: { nested: true },
+    });
+
+    const blocks = harness.dump();
+    expect(blocks.size).toBeGreaterThan(0);
+    expect(blocks.has("__hstore_head__")).toBe(true);
   });
 });
 
