@@ -76,14 +76,18 @@ export const serializeObject = (
 ): Uint8Array =>
   serializeCanonical([
     canonicalKind.object,
-    entries.map((entry) => [entry.key, entry.hash] as const)
+  entries.map((entry) => [entry.key, entry.hash] as const)
   ]);
 
-export const enumerateArray = (values: JsonArray): ReadonlyArray<JsonValue> => [
+const enumerateArray = (values: JsonArray): ReadonlyArray<JsonValue> => [
   ...values
 ];
 
-export const enumerateObject = (
+export const canonicalArrayValues = (
+  values: JsonArray
+): ReadonlyArray<JsonValue> => enumerateArray(values);
+
+const enumerateObject = (
   value: JsonObject
 ): ReadonlyArray<readonly [string, JsonValue]> => {
   const keys = Object.keys(value).sort((left, right) =>
@@ -92,6 +96,10 @@ export const enumerateObject = (
 
   return keys.map((key) => [key, value[key]] as const);
 };
+
+export const canonicalObjectEntries = (
+  value: JsonObject
+): ReadonlyArray<readonly [string, JsonValue]> => enumerateObject(value);
 
 const toObjectEntries = (
   entries: ReadonlyArray<readonly [string, Hash]>

@@ -1,6 +1,6 @@
 import {
-  enumerateArray,
-  enumerateObject,
+  canonicalArrayValues,
+  canonicalObjectEntries,
   serializeArray,
   serializeObject,
   serializePrimitive
@@ -146,7 +146,7 @@ const persistCompositeArray = async (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
-  const canonicalValues = enumerateArray(values);
+  const canonicalValues = canonicalArrayValues(values);
   const children = await Promise.all(
     canonicalValues.map((item) => persistValue(item, cache, context))
   );
@@ -198,7 +198,7 @@ const persistCompositeObject = async (
   context: PersistContext
 ): Promise<PersistOutcome> => {
   const children = await Promise.all(
-    enumerateObject(value).map(async ([key, childValue]) => ({
+    canonicalObjectEntries(value).map(async ([key, childValue]) => ({
       key,
       child: await persistValue(childValue, cache, context)
     }))
