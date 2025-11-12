@@ -1,4 +1,4 @@
-# object-hash-store
+# @hstore/workspace
 
 Functional, content-addressable storage for evolving JSON state. The repo is a Bun workspace composed of focused packages so adapters and hashing strategies can evolve independently.
 
