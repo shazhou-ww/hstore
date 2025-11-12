@@ -55,5 +55,5 @@ export type HStore<T extends JsonValue> = Readonly<{
 
 export type CreateStore = <T extends JsonValue>(
   options: CreateStoreOptions<T>
-) => HStore<T>;
+) => Promise<HStore<T>>;
 

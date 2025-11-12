@@ -51,7 +51,7 @@ const schema = z
 describe("createStore", () => {
   test("commit returns frozen versions and updates head", async () => {
     const harness = createAdapterHarness();
-    const store = createStore({
+    const store = await createStore({
       hashFn: sha256,
       adapter: harness.adapter,
       schema,
@@ -82,7 +82,7 @@ describe("createStore", () => {
 
   test("creates a version chain and reuses cached nodes", async () => {
     const harness = createAdapterHarness();
-    const store = createStore({
+    const store = await createStore({
       hashFn: sha256,
       adapter: harness.adapter,
       schema,
@@ -116,7 +116,7 @@ describe("createStore", () => {
 
   test("returns null when requesting an unknown version", async () => {
     const harness = createAdapterHarness();
-    const store = createStore({
+    const store = await createStore({
       hashFn: sha256,
       adapter: harness.adapter,
       schema,
@@ -128,7 +128,7 @@ describe("createStore", () => {
 
   test("enforces schema validation on commit", async () => {
     const harness = createAdapterHarness();
-    const store = createStore({
+    const store = await createStore({
       hashFn: sha256,
       adapter: harness.adapter,
       schema,
@@ -145,7 +145,7 @@ describe("createStore", () => {
 
   test("stores head pointer alongside persisted versions", async () => {
     const harness = createAdapterHarness();
-    const store = createStore({
+    const store = await createStore({
       hashFn: sha256,
       adapter: harness.adapter,
       schema,

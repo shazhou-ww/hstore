@@ -57,7 +57,7 @@ const isVersionBlock = (value: unknown): value is VersionBlock => {
   );
 };
 
-export const createStore: CreateStore = <T extends JsonValue>({
+export const createStore: CreateStore = async <T extends JsonValue>({
   adapter,
   hashFn,
   schema,
@@ -65,7 +65,20 @@ export const createStore: CreateStore = <T extends JsonValue>({
   const objectStore = createObjectStore({ adapter, hashFn });
   const versionCache = new Map<Hash, StateVersion<T>>();
 
-  let headMemo: Hash | null | undefined;
+  let headMemo: Hash | null = (await (async () => {
+    const stored = await adapter.read(HEAD_KEY);
+    if (!stored) {
+      await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
+      return null;
+    }
+
+    const decoded = decodeHead(stored.bytes);
+    if (decoded === null) {
+      await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
+    }
+
+    return decoded;
+  })()) ?? null;
 
   const rememberVersion = (
     hash: Hash,
@@ -82,24 +95,9 @@ export const createStore: CreateStore = <T extends JsonValue>({
     return version;
   };
 
-  const loadHeadHash = async (): Promise<Hash | null> => {
-    if (headMemo !== undefined) {
-      return headMemo;
-    }
-
-    const stored = await adapter.read(HEAD_KEY);
-    if (!stored) {
-      headMemo = null;
-      return headMemo;
-    }
-
-    headMemo = decodeHead(stored.bytes);
-    return headMemo;
-  };
-
   const persistHead = async (hash: Hash | null) => {
-    headMemo = hash;
     await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(hash) });
+    headMemo = hash;
   };
 
   const loadVersion = async (hash: Hash): Promise<StateVersion<T> | null> => {
@@ -141,7 +139,7 @@ export const createStore: CreateStore = <T extends JsonValue>({
   };
 
   const head = async (): Promise<StateVersion<T> | null> => {
-    const current = await loadHeadHash();
+    const current = headMemo;
     if (!current) {
       return null;
     }
@@ -160,7 +158,7 @@ export const createStore: CreateStore = <T extends JsonValue>({
     const frozenValue =
       cachedValue ?? (freezeJson(parsed as JsonValue) as FrozenJson<T>);
 
-    const previous = await loadHeadHash();
+    const previous = headMemo;
     const block: VersionBlock = {
       value: valueHash,
       previous,
