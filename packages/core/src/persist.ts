@@ -1,21 +1,37 @@
+import {
+  serializeCanonicalArray,
+  serializeCanonicalObject,
+  serializeCanonicalPrimitive,
+  serializeNode
+} from "./createHasher";
 import type { Hash } from "./types/hash";
 import type { Hasher } from "./types/hasher";
-import type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./types/json";
 import type {
-  ArrayNode,
+  JsonArray,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue
+} from "./types/json";
+import type {
   HNode,
-  ObjectNode,
-  PrimitiveNode
 } from "./types/node";
 import type { StorageAdapter } from "./types/adapter";
-import type { PersistResult } from "./types/store";
 
 /**
  * Internal result of persisting a node, containing its hash and number of writes performed.
  */
-type PersistOutcome = Readonly<{
+export type PersistOutcome = Readonly<{
   hash: Hash;
   writes: number;
+}>;
+
+/**
+ * Shared caches that allow short-circuiting hashing for known values.
+ */
+export type PersistHashHints = Readonly<{
+  primitives: Map<JsonPrimitive, Hash>;
+  arrays: WeakMap<JsonArray, Hash>;
+  objects: WeakMap<JsonObject, Hash>;
 }>;
 
 /**
@@ -24,6 +40,7 @@ type PersistOutcome = Readonly<{
 export type PersistContext = Readonly<{
   adapter: StorageAdapter;
   hasher: Hasher;
+  hints: PersistHashHints;
 }>;
 
 /**
@@ -51,29 +68,20 @@ const createCache = (): PersistCache =>
     objects: new WeakMap()
   }) as const;
 
-/**
- * Converts a JSON primitive into a primitive node.
- */
-const toPrimitiveNode = (value: JsonPrimitive): PrimitiveNode => ({
-  kind: "primitive",
-  value
-});
+const persistBytes = async (
+  bytes: Uint8Array,
+  context: PersistContext
+): Promise<PersistOutcome> => {
+  const hash = await context.hasher.hashBytes(bytes);
+  const existing = await context.adapter.read(hash);
 
-/**
- * Converts element hashes into an array node.
- */
-const toArrayNode = (elements: ReadonlyArray<Hash>): ArrayNode => ({
-  kind: "array",
-  elements
-});
+  if (existing) {
+    return { hash, writes: 0 };
+  }
 
-/**
- * Converts key/hash pairs into an object node.
- */
-const toObjectNode = (entries: ReadonlyArray<{ key: string; hash: Hash }>): ObjectNode => ({
-  kind: "object",
-  entries
-});
+  await context.adapter.write({ hash, bytes });
+  return { hash, writes: 1 };
+};
 
 /**
  * Persists a primitive JSON value, leveraging cache hits when possible.
@@ -83,6 +91,12 @@ const persistPrimitive = (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
+  const hinted = context.hints.primitives.get(value);
+
+  if (hinted) {
+    return Promise.resolve({ hash: hinted, writes: 0 });
+  }
+
   const cached = cache.primitives.get(value);
 
   if (cached) {
@@ -92,7 +106,8 @@ const persistPrimitive = (
     }));
   }
 
-  const outcome = persistNode(toPrimitiveNode(value), context);
+  const bytes = serializeCanonicalPrimitive(value);
+  const outcome = persistBytes(bytes, context);
   cache.primitives.set(value, outcome);
   return outcome;
 };
@@ -105,6 +120,12 @@ const persistArray = (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
+  const hinted = context.hints.arrays.get(values);
+
+  if (hinted) {
+    return Promise.resolve({ hash: hinted, writes: 0 });
+  }
+
   const cached = cache.arrays.get(values);
 
   if (cached) {
@@ -128,8 +149,9 @@ const persistCompositeArray = async (
   context: PersistContext
 ): Promise<PersistOutcome> => {
   const children = await Promise.all(values.map((item) => persistValue(item, cache, context)));
-  const node = toArrayNode(children.map((child) => child.hash));
-  const current = await persistNode(node, context);
+  const hashes = children.map((child) => child.hash);
+  const bytes = serializeCanonicalArray(hashes);
+  const current = await persistBytes(bytes, context);
   const writes = children.reduce((sum, child) => sum + child.writes, 0) + current.writes;
 
   return {
@@ -146,6 +168,12 @@ const persistObject = (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
+  const hinted = context.hints.objects.get(value);
+
+  if (hinted) {
+    return Promise.resolve({ hash: hinted, writes: 0 });
+  }
+
   const cached = cache.objects.get(value);
 
   if (cached) {
@@ -176,8 +204,9 @@ const persistCompositeObject = async (
     }))
   );
 
-  const node = toObjectNode(children.map(({ key, child }) => ({ key, hash: child.hash })));
-  const current = await persistNode(node, context);
+  const entries = children.map(({ key, child }) => ({ key, hash: child.hash }));
+  const bytes = serializeCanonicalObject(entries);
+  const current = await persistBytes(bytes, context);
   const writes =
     children.reduce((sum, { child }) => sum + child.writes, 0) + current.writes;
 
@@ -221,15 +250,8 @@ export const persistNode = async (
   node: HNode,
   context: PersistContext
 ): Promise<PersistOutcome> => {
-  const hash = await context.hasher.hashNode(node);
-  const existing = await context.adapter.read(hash);
-
-  if (existing) {
-    return { hash, writes: 0 };
-  }
-
-  await context.adapter.write({ hash, node });
-  return { hash, writes: 1 };
+  const bytes = serializeNode(node);
+  return persistBytes(bytes, context);
 };
 
 /**
@@ -238,13 +260,10 @@ export const persistNode = async (
 export const persistJsonValue = async (
   value: JsonValue,
   context: PersistContext
-): Promise<PersistResult> => {
+): Promise<PersistOutcome> => {
   const cache = createCache();
   const outcome = await persistValue(value, cache, context);
 
-  return {
-    rootHash: outcome.hash,
-    nodesWritten: outcome.writes
-  };
+  return outcome;
 };
 

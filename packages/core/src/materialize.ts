@@ -1,119 +1,101 @@
-import type { JsonArray, JsonObject, JsonValue } from "./types/json";
 import type { Hash } from "./types/hash";
-import type { HNode, ObjectNode } from "./types/node";
+import type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./types/json";
+import { deserializeNode } from "./createHasher";
+import type { HNode } from "./types/node";
 import type { StorageAdapter } from "./types/adapter";
-import type { MaterializeOptions, MaterializeResult } from "./types/store";
+import type { FrozenJson } from "./types/store";
+import type { PersistHashHints } from "./persist";
 
-/**
- * Context shared across materialization steps, providing access to storage and the depth budget.
- */
+type FrozenValue = FrozenJson<JsonValue>;
+
+type MaterializeCaches = Readonly<{
+  values: Map<Hash, FrozenValue>;
+  hints: PersistHashHints;
+}>;
+
 type MaterializeContext = Readonly<{
   adapter: StorageAdapter;
-  depthLimit: number;
+  caches: MaterializeCaches;
 }>;
 
-/**
- * Result of visiting a node, including the computed JSON value and the number of nodes reached.
- */
-type VisitOutcome = Readonly<{
-  value: JsonValue;
-  visited: number;
-}>;
+const freezeArray = (elements: ReadonlyArray<FrozenValue>): FrozenJson<JsonArray> =>
+  Object.freeze(elements.slice()) as FrozenJson<JsonArray>;
 
-/**
- * Expands an array node into a JSON array, respecting the remaining depth budget.
- */
-const asArrayValue = async (
-  node: HNode,
-  context: MaterializeContext,
-  depth: number
-): Promise<VisitOutcome> => {
-  if (node.kind !== "array") {
-    throw new Error("Expected array node");
+const freezeObject = (
+  entries: ReadonlyArray<readonly [string, FrozenValue]>
+): FrozenJson<JsonObject> => {
+  const result: Record<string, FrozenValue> = {};
+
+  for (const [key, value] of entries) {
+    result[key] = value;
   }
 
-  const nextDepth = depth - 1;
-
-  if (nextDepth < 0) {
-    return { value: node.elements as unknown as JsonArray, visited: 1 };
-  }
-
-  const children = await Promise.all(
-    node.elements.map((hash) => materializeHash(hash, context, nextDepth))
-  );
-
-  const value = children.map((child) => child.value) as JsonArray;
-  const visited = 1 + children.reduce((sum, child) => sum + child.visited, 0);
-
-  return { value, visited };
+  return Object.freeze(result) as FrozenJson<JsonObject>;
 };
 
-/**
- * Expands an object node into a JSON object, respecting the remaining depth budget.
- */
-const asObjectValue = async (
+const asPrimitive = (
   node: HNode,
-  context: MaterializeContext,
-  depth: number
-): Promise<VisitOutcome> => {
-  if (node.kind !== "object") {
-    throw new Error("Expected object node");
-  }
-
-  const nextDepth = depth - 1;
-
-  if (nextDepth < 0) {
-    const placeholder: Record<string, JsonValue> = {};
-
-    for (const entry of node.entries) {
-      placeholder[entry.key] = entry.hash;
-    }
-
-    return { value: placeholder as JsonObject, visited: 1 };
-  }
-
-  const pairs = await Promise.all(
-    node.entries.map(async (entry) => {
-      const child = await materializeHash(entry.hash, context, nextDepth);
-      return [entry.key, child] as const;
-    })
-  );
-
-  const value = pairs.reduce<Record<string, JsonValue>>(
-    (accumulator, [key, outcome]) => {
-      accumulator[key] = outcome.value;
-      return accumulator;
-    },
-    {}
-  );
-
-  const visited =
-    1 + pairs.reduce((sum, [, outcome]) => sum + outcome.visited, 0);
-
-  return { value: value as JsonObject, visited };
-};
-
-/**
- * Returns the primitive value stored in a primitive node.
- */
-const asPrimitiveValue = (node: HNode): VisitOutcome => {
+  hash: Hash,
+  caches: MaterializeCaches
+): FrozenValue => {
   if (node.kind !== "primitive") {
     throw new Error("Expected primitive node");
   }
 
-  return { value: node.value, visited: 1 };
+  caches.hints.primitives.set(node.value as JsonPrimitive, hash);
+  caches.values.set(hash, node.value as FrozenValue);
+  return node.value as FrozenValue;
 };
 
-/**
- * Resolves a hash to its JSON value by traversing the underlying node structure.
- */
+const asArray = async (
+  node: HNode,
+  hash: Hash,
+  context: MaterializeContext
+): Promise<FrozenValue> => {
+  if (node.kind !== "array") {
+    throw new Error("Expected array node");
+  }
+
+  const children = await Promise.all(
+    node.elements.map((childHash) => materializeHash(childHash, context))
+  );
+
+  const frozen = freezeArray(children);
+  context.caches.hints.arrays.set(frozen, hash);
+  context.caches.values.set(hash, frozen);
+  return frozen;
+};
+
+const asObject = async (
+  node: HNode,
+  hash: Hash,
+  context: MaterializeContext
+): Promise<FrozenValue> => {
+  if (node.kind !== "object") {
+    throw new Error("Expected object node");
+  }
+
+  const pairs = await Promise.all(
+    node.entries.map(async (entry) => {
+      const value = await materializeHash(entry.hash, context);
+      return [entry.key, value] as const;
+    })
+  );
+
+  const frozen = freezeObject(pairs);
+  context.caches.hints.objects.set(frozen, hash);
+  context.caches.values.set(hash, frozen);
+  return frozen;
+};
+
 const materializeHash = async (
   hash: Hash,
-  context: MaterializeContext,
-  depth: number
-): Promise<VisitOutcome> => {
-  if (depth < 0) {
-    return { value: hash, visited: 0 };
+  context: MaterializeContext
+): Promise<FrozenValue> => {
+  const cached = context.caches.values.get(hash);
+
+  if (cached) {
+    return cached;
   }
 
   const record = await context.adapter.read(hash);
@@ -122,43 +104,43 @@ const materializeHash = async (
     throw new Error(`Missing node for hash "${hash}"`);
   }
 
-  if (record.node.kind === "primitive") {
-    return asPrimitiveValue(record.node);
+  const node = deserializeNode(record.bytes);
+
+  if (node.kind === "primitive") {
+    return asPrimitive(node, hash, context.caches);
   }
 
-  if (record.node.kind === "array") {
-    return asArrayValue(record.node, context, depth);
+  if (node.kind === "array") {
+    return asArray(node, hash, context);
   }
 
-  return asObjectValue(record.node, context, depth);
+  return asObject(node, hash, context);
 };
 
-/**
- * Converts materialization options into a numeric depth limit.
- */
-const resolveDepthLimit = (options?: MaterializeOptions): number => {
-  if (!options || options.limitDepth === undefined) {
-    return Number.POSITIVE_INFINITY;
-  }
+export type ImmutableMaterializer = Readonly<{
+  materialize(hash: Hash): Promise<FrozenValue>;
+  caches: MaterializeCaches;
+}>;
 
-  return options.limitDepth;
-};
-
-/**
- * Materializes a stored tree, returning the JSON value and the number of visited nodes.
- */
-export const materialize = async (
-  hash: Hash,
-  adapter: StorageAdapter,
-  options?: MaterializeOptions
-): Promise<MaterializeResult> => {
-  const depthLimit = resolveDepthLimit(options);
-  const context: MaterializeContext = { adapter, depthLimit };
-  const outcome = await materializeHash(hash, context, depthLimit);
+export const createImmutableMaterializer = (
+  adapter: StorageAdapter
+): ImmutableMaterializer => {
+  const context: MaterializeContext = {
+    adapter,
+    caches: {
+      values: new Map<Hash, FrozenValue>(),
+      hints: {
+        primitives: new Map<JsonPrimitive, Hash>(),
+        arrays: new WeakMap<JsonArray, Hash>(),
+        objects: new WeakMap<JsonObject, Hash>()
+      }
+    }
+  };
 
   return {
-    value: outcome.value,
-    visited: outcome.visited
+    materialize: (hash: Hash) => materializeHash(hash, context),
+    caches: context.caches
   };
 };
+
 

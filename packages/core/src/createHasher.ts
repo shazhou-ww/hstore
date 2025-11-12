@@ -1,34 +1,49 @@
-import { TextEncoder } from "util";
+import { TextDecoder, TextEncoder } from "util";
 import type { Hash, HashFn } from "./types/hash";
 import type { Hasher } from "./types/hasher";
+import type { ArrayNode, HNode, ObjectNode, PrimitiveNode } from "./types/node";
 import type {
-  ArrayNode,
-  HNode,
-  ObjectNode,
-  PrimitiveNode
-} from "./types/node";
-import type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./types/json";
+  JsonArray,
+  JsonObject,
+  JsonPrimitive,
+  JsonValue
+} from "./types/json";
 
 /**
  * Canonical representation of a node used for stable serialization prior to hashing.
  */
+type CanonicalKind = 0 | 1 | 2;
+
+const canonicalKind = {
+  primitive: 0 as CanonicalKind,
+  array: 1 as CanonicalKind,
+  object: 2 as CanonicalKind
+} as const;
+
 type CanonicalNode =
-  | readonly ["primitive", JsonPrimitive]
-  | readonly ["array", ReadonlyArray<Hash>]
-  | readonly ["object", ReadonlyArray<readonly [string, Hash]>];
+  | readonly [typeof canonicalKind.primitive, JsonPrimitive]
+  | readonly [typeof canonicalKind.array, ReadonlyArray<Hash>]
+  | readonly [
+      typeof canonicalKind.object,
+      ReadonlyArray<readonly [string, Hash]>
+    ];
 
 const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
+const serializeCanonical = (canonical: CanonicalNode): Uint8Array =>
+  textEncoder.encode(JSON.stringify(canonical));
 
 /**
  * Produces a canonical tuple-based structure from a node, ensuring deterministic ordering.
  */
 const canonicalizeNode = (node: HNode): CanonicalNode => {
   if (node.kind === "primitive") {
-    return ["primitive", node.value];
+    return [canonicalKind.primitive, node.value];
   }
 
   if (node.kind === "array") {
-    return ["array", [...node.elements]];
+    return [canonicalKind.array, [...node.elements]];
   }
 
   const sorted = [...node.entries].sort((left, right) =>
@@ -36,7 +51,7 @@ const canonicalizeNode = (node: HNode): CanonicalNode => {
   );
 
   return [
-    "object",
+    canonicalKind.object,
     sorted.map((entry) => [entry.key, entry.hash] as const)
   ];
 };
@@ -44,9 +59,61 @@ const canonicalizeNode = (node: HNode): CanonicalNode => {
 /**
  * Serializes a node into UTF-8 bytes of its canonical JSON representation.
  */
-const serializeNode = (node: HNode): Uint8Array => {
+export const serializeNode = (node: HNode): Uint8Array => {
   const canonical = canonicalizeNode(node);
-  return textEncoder.encode(JSON.stringify(canonical));
+  return serializeCanonical(canonical);
+};
+
+export const serializeCanonicalPrimitive = (value: JsonPrimitive): Uint8Array =>
+  serializeCanonical([canonicalKind.primitive, value]);
+
+export const serializeCanonicalArray = (
+  hashes: ReadonlyArray<Hash>
+): Uint8Array => serializeCanonical([canonicalKind.array, [...hashes]]);
+
+export const serializeCanonicalObject = (
+  entries: ReadonlyArray<{ key: string; hash: Hash }>
+): Uint8Array =>
+  serializeCanonical([
+    canonicalKind.object,
+    entries.map((entry) => [entry.key, entry.hash] as const)
+  ]);
+
+const toObjectEntries = (
+  entries: ReadonlyArray<readonly [string, Hash]>
+): ReadonlyArray<{ key: string; hash: Hash }> =>
+  entries.map(([key, hash]) => ({ key, hash }));
+
+const fromCanonical = (canonical: CanonicalNode): HNode => {
+  const [kind, payload] = canonical;
+
+  if (kind === canonicalKind.primitive) {
+    return {
+      kind: "primitive",
+      value: payload as JsonPrimitive
+    };
+  }
+
+  if (kind === canonicalKind.array) {
+    return {
+      kind: "array",
+      elements: payload as ReadonlyArray<Hash>
+    };
+  }
+
+  return {
+    kind: "object",
+    entries: toObjectEntries(payload as ReadonlyArray<readonly [string, Hash]>)
+  };
+};
+
+/**
+ * Deserializes canonical node bytes back into an HNode.
+ */
+export const deserializeNode = (bytes: Uint8Array): HNode => {
+  const json = textDecoder.decode(bytes);
+  const canonical = JSON.parse(json) as CanonicalNode;
+  return fromCanonical(canonical);
 };
 
 /**
@@ -145,11 +212,13 @@ const createObjectNode = async (
 export const createHasher = (hashFn: HashFn): Hasher => {
   const hashNode = createHashNode(hashFn);
   const hashValue = (value: JsonValue) => hashValueWith(value, hashNode);
+  const hashBytes = (bytes: Uint8Array) =>
+    Promise.resolve(hashFn(bytes));
 
   return Object.freeze({
     hashNode,
     hashValue,
-    serializeNode
+    hashBytes
   });
 };
 

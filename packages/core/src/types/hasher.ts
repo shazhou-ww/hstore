@@ -13,16 +13,16 @@ export type HashNode = (node: HNode) => Promise<Hash>;
 export type HashValue = (value: JsonValue) => Promise<Hash>;
 
 /**
- * Serializes a node into a deterministic byte representation.
+ * Hashes canonical byte payloads directly.
  */
-export type SerializeNode = (node: HNode) => Uint8Array;
+export type HashBytes = (bytes: Uint8Array) => Promise<Hash>;
 
 /**
- * Composite hasher capable of serializing and hashing nodes and JSON values.
+ * Composite hasher capable of hashing nodes, values, and canonical bytes.
  */
 export type Hasher = Readonly<{
   hashNode: HashNode;
   hashValue: HashValue;
-  serializeNode: SerializeNode;
+  hashBytes: HashBytes;
 }>;
 

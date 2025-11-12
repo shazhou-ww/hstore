@@ -1,84 +1,25 @@
-import type {
-  HNode,
-  Hash,
-  ObjectNode,
-  StorageAdapter,
-  StoredNode
-} from "@hstore/core";
+import type { Hash, StorageAdapter, StoredBlock } from "@hstore/core";
 
 export type MemoryAdapterOptions = Readonly<{
-  seed?: Iterable<StoredNode>;
+  seed?: Iterable<StoredBlock>;
 }>;
 
-const copyNode = (node: HNode): HNode => {
-  if (node.kind === "primitive") {
-    return {
-      kind: "primitive",
-      value: node.value
-    };
-  }
+const cloneBytes = (bytes: Uint8Array): Uint8Array => new Uint8Array(bytes);
 
-  if (node.kind === "array") {
-    return {
-      kind: "array",
-      elements: [...node.elements]
-    };
-  }
-
-  const objectNode = node as ObjectNode;
-
-  return {
-    kind: "object",
-    entries: objectNode.entries.map((entry: ObjectNode["entries"][number]): { key: string; hash: Hash } => ({
-      key: entry.key,
-      hash: entry.hash
-    }))
-  };
-};
-
-const freezeNode = (node: HNode): HNode => {
-  if (node.kind === "primitive") {
-    return Object.freeze({
-      kind: "primitive",
-      value: node.value
-    });
-  }
-
-  if (node.kind === "array") {
-    return Object.freeze({
-      kind: "array",
-      elements: Object.freeze([...node.elements])
-    });
-  }
-
-  const objectNode = node as ObjectNode;
-  const entries = objectNode.entries.map((entry: ObjectNode["entries"][number]): { key: string; hash: Hash } =>
-    Object.freeze({
-      key: entry.key,
-      hash: entry.hash
-    })
-  );
-
-  return Object.freeze({
-    kind: "object",
-    entries: Object.freeze(entries)
-  });
-};
-
-const freezeStoredNode = (record: StoredNode): StoredNode =>
+const freezeStoredBlock = (record: StoredBlock): StoredBlock =>
   Object.freeze({
     hash: record.hash,
-    node: freezeNode(record.node)
+    bytes: cloneBytes(record.bytes)
   });
 
-const cloneStoredNode = (record: StoredNode): StoredNode =>
-  freezeStoredNode({
+const cloneStoredBlock = (record: StoredBlock): StoredBlock =>
+  freezeStoredBlock({
     hash: record.hash,
-    node: copyNode(record.node)
+    bytes: record.bytes
   });
 
 const seedStore = (
-  map: Map<Hash, StoredNode>,
+  map: Map<Hash, StoredBlock>,
   options?: MemoryAdapterOptions
 ): void => {
   if (!options?.seed) {
@@ -86,23 +27,23 @@ const seedStore = (
   }
 
   for (const record of options.seed) {
-    map.set(record.hash, freezeStoredNode(record));
+    map.set(record.hash, freezeStoredBlock(record));
   }
 };
 
 export const createMemoryAdapter = (
   options?: MemoryAdapterOptions
 ): StorageAdapter => {
-  const store = new Map<Hash, StoredNode>();
+  const store = new Map<Hash, StoredBlock>();
   seedStore(store, options);
 
   const read: StorageAdapter["read"] = async (hash: Hash) => {
     const record = store.get(hash);
-    return record ? cloneStoredNode(record) : undefined;
+    return record ? cloneStoredBlock(record) : undefined;
   };
 
-  const write: StorageAdapter["write"] = async (record: StoredNode) => {
-    store.set(record.hash, freezeStoredNode(record));
+  const write: StorageAdapter["write"] = async (record: StoredBlock) => {
+    store.set(record.hash, freezeStoredBlock(record));
   };
 
   return Object.freeze({

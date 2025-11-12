@@ -1,29 +1,28 @@
 import type { Hash } from "./hash";
-import type { HNode } from "./node";
 
 /**
- * Node record persisted in storage, including its hash and serialized structure.
+ * Canonical payload persisted for a hash, stored as raw bytes.
  */
-export type StoredNode = {
-  readonly hash: Hash;
-  readonly node: HNode;
-};
+export type StoredBlock = Readonly<{
+  hash: Hash;
+  bytes: Uint8Array;
+}>;
 
 /**
- * Reads a stored node by hash, returning undefined when absent.
+ * Reads a stored block by hash, returning undefined when absent.
  */
-export type ReadNode = (hash: Hash) => Promise<StoredNode | undefined>;
+export type ReadBlock = (hash: Hash) => Promise<StoredBlock | undefined>;
 
 /**
- * Persists a node record into storage.
+ * Persists a canonical block into storage.
  */
-export type WriteNode = (record: StoredNode) => Promise<void>;
+export type WriteBlock = (record: StoredBlock) => Promise<void>;
 
 /**
- * Adapter interface used to read and write hashed nodes.
+ * Adapter interface used to read and write canonical hash blocks.
  */
 export type StorageAdapter = Readonly<{
-  read: ReadNode;
-  write: WriteNode;
+  read: ReadBlock;
+  write: WriteBlock;
 }>;
 

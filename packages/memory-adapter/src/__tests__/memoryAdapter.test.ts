@@ -1,22 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import type { StoredNode } from "@hstore/core";
+import type { StoredBlock } from "@hstore/core";
 import { createMemoryAdapter } from "../memoryAdapter";
 
-const sampleNode = (hash: string): StoredNode => ({
+const sampleBlock = (hash: string, seed: number = 0): StoredBlock => ({
   hash,
-  node: {
-    kind: "object",
-    entries: [
-      { key: "foo", hash: "foo-hash" },
-      { key: "bar", hash: "bar-hash" }
-    ]
-  }
+  bytes: new Uint8Array([seed, seed + 1, seed + 2])
 });
 
 describe("createMemoryAdapter", () => {
   test("reads back stored nodes", async () => {
     const adapter = createMemoryAdapter();
-    const original = sampleNode("root");
+    const original = sampleBlock("root");
 
     await adapter.write(original);
     const retrieved = await adapter.read("root");
@@ -27,7 +21,7 @@ describe("createMemoryAdapter", () => {
 
   test("exposes immutable stored structures", async () => {
     const adapter = createMemoryAdapter();
-    const original = sampleNode("immutable");
+    const original = sampleBlock("immutable", 10);
 
     await adapter.write(original);
     const retrieved = await adapter.read("immutable");
@@ -36,15 +30,16 @@ describe("createMemoryAdapter", () => {
       throw new Error("missing");
     }
 
-    expect(Object.isFrozen(retrieved.node)).toBe(true);
+    expect(retrieved.bytes).not.toBe(original.bytes);
+    const first = retrieved.bytes[0];
+    retrieved.bytes[0] = first + 5;
 
-    if (retrieved.node.kind === "object") {
-      expect(Object.isFrozen(retrieved.node.entries)).toBe(true);
-    }
+    const reread = await adapter.read("immutable");
+    expect(reread?.bytes[0]).toBe(first);
   });
 
   test("seeds initial nodes", async () => {
-    const seeded = sampleNode("seed");
+    const seeded = sampleBlock("seed");
     const adapter = createMemoryAdapter({ seed: [seeded] });
 
     const result = await adapter.read("seed");

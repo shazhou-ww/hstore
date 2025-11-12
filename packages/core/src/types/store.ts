@@ -1,62 +1,52 @@
+import type { ZodType } from "zod";
 import type { Hash, HashFn } from "./hash";
-import type { JsonValue } from "./json";
-import type { ReadNode, StorageAdapter } from "./adapter";
+import type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./json";
+import type { StorageAdapter } from "./adapter";
 
 /**
- * Outcome of persisting a value, including the root hash and write count.
+ * Recursively readonly JSON value used to represent immutable store payloads.
  */
-export type PersistResult = Readonly<{
-  rootHash: Hash;
-  nodesWritten: number;
+export type FrozenJson<T extends JsonValue> = T extends JsonPrimitive
+  ? T
+  : T extends JsonArray
+    ? ReadonlyArray<FrozenJson<T[number]>>
+    : T extends JsonObject
+      ? { readonly [K in keyof T]: FrozenJson<T[K]> }
+      : never;
+
+/**
+ * Metadata describing a committed state version.
+ */
+export type StateVersion<T extends JsonValue> = Readonly<{
+  hash: Hash;
+  value: FrozenJson<T>;
+  previous: Hash | null;
+  timestamp: number;
 }>;
 
 /**
- * Options controlling how materialization traverses node graphs.
+ * Options required to create a typed, versioned store.
  */
-export type MaterializeOptions = Readonly<{
-  limitDepth?: number;
-}>;
-
-/**
- * Outcome of materializing a hash back into JSON.
- */
-export type MaterializeResult = Readonly<{
-  value: JsonValue;
-  visited: number;
-}>;
-
-/**
- * Persists a JSON value and returns metadata about the operation.
- */
-export type Persist = (value: JsonValue) => Promise<PersistResult>;
-
-/**
- * Materializes a stored hash back into JSON.
- */
-export type Materialize = (
-  hash: Hash,
-  options?: MaterializeOptions
-) => Promise<MaterializeResult>;
-
-/**
- * High-level store API exposing persistence and materialization helpers.
- */
-export type HStore = Readonly<{
-  persist: Persist;
-  materialize: Materialize;
-  readNode: ReadNode;
-}>;
-
-/**
- * Options required to create a new store instance.
- */
-export type CreateStoreOptions = Readonly<{
+export type CreateStoreOptions<T extends JsonValue> = Readonly<{
   hashFn: HashFn;
   adapter: StorageAdapter;
+  schema: ZodType<T>;
 }>;
 
 /**
- * Factory creating immutable store instances.
+ * Versioned store API dedicated to a single typed state chain.
  */
-export type CreateStore = (options: CreateStoreOptions) => HStore;
+export type HStore<T extends JsonValue> = Readonly<{
+  commit(value: T): Promise<StateVersion<T>>;
+  head(): Promise<StateVersion<T> | null>;
+  get(hash: Hash): Promise<StateVersion<T> | null>;
+}>;
+
+/**
+ * Factory creating typed versioned store instances.
+ */
+export type CreateStore = <T extends JsonValue>(
+  options: CreateStoreOptions<T>
+) => HStore<T>;
+
 

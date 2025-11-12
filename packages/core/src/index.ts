@@ -13,26 +13,28 @@ export type {
   HNode
 } from "./types/node";
 export type {
-  StoredNode,
-  ReadNode,
-  WriteNode,
+  StoredBlock,
+  ReadBlock,
+  WriteBlock,
   StorageAdapter
 } from "./types/adapter";
-export type { Hasher, HashNode, HashValue, SerializeNode } from "./types/hasher";
+export type { Hasher, HashNode, HashValue, HashBytes } from "./types/hasher";
 export type {
-  PersistResult,
-  MaterializeOptions,
-  MaterializeResult,
+  FrozenJson,
+  StateVersion,
   HStore,
   CreateStoreOptions,
   CreateStore
 } from "./types/store";
 export { createHasher } from "./createHasher";
+export { serializeNode, deserializeNode } from "./createHasher";
 export { createStore } from "./createStore";
 export {
   persistJsonValue,
   persistNode,
-  type PersistContext
+  type PersistContext,
+  type PersistOutcome,
+  type PersistHashHints
 } from "./persist";
-export { materialize } from "./materialize";
+export { createImmutableMaterializer, type ImmutableMaterializer } from "./materialize";
 
