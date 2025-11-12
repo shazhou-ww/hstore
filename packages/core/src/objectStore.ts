@@ -67,29 +67,30 @@ export const createObjectStore = ({
 
     if (tag === 1) {
       const childHashes = payload as ChildHashList;
-      const values: JsonValue[] = [];
-      for (const childHash of childHashes) {
-        const childValue = await read(childHash);
-        if (childValue === undefined) {
-          return undefined;
-        }
-        values.push(childValue);
+      const childValues = await Promise.all(
+        childHashes.map((childHash) => read(childHash))
+      );
+
+      if (childValues.some((value) => value === undefined)) {
+        return undefined;
       }
 
-      return freezeJson(values as JsonValue);
+      return freezeJson(childValues as JsonValue);
     }
 
     const entries = payload as HashedEntryList;
-    const pairs: JsonEntry[] = [];
-    for (const [key, childHash] of entries) {
-      const childValue = await read(childHash);
-      if (childValue === undefined) {
-        return undefined;
-      }
-      pairs.push([key, childValue]);
+    const pairs = await Promise.all(
+      entries.map(async ([key, childHash]): Promise<JsonEntry | undefined> => {
+        const childValue = await read(childHash);
+        return childValue === undefined ? undefined : ([key, childValue] as JsonEntry);
+      })
+    );
+
+    if (pairs.some((pair) => pair === undefined)) {
+      return undefined;
     }
 
-    return freezeJson(Object.fromEntries(pairs) as JsonObject);
+    return freezeJson(Object.fromEntries(pairs as JsonEntry[]) as JsonObject);
   };
 
   /**
@@ -137,11 +138,12 @@ export const createObjectStore = ({
         Object.entries(value as JsonObject) as JsonEntryList
       );
 
-      const hashedEntries: HashedEntry[] = [];
-      for (const [key, childValue] of entries) {
-        const childHash = await writeFrozen(childValue);
-        hashedEntries.push([key, childHash]);
-      }
+      const hashedEntries = await Promise.all(
+        entries.map(async ([key, childValue]): Promise<HashedEntry> => [
+          key,
+          await writeFrozen(childValue),
+        ])
+      );
       node = [2, hashedEntries];
     }
 
