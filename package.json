@@ -8,7 +8,8 @@
   "scripts": {
     "build": "bun run \"--filter=@hstore/*\" build",
     "lint": "bun run \"--filter=@hstore/*\" lint",
-    "test": "bun run \"--filter=@hstore/*\" test"
+    "test": "bun run \"--filter=@hstore/*\" test",
+    "publish": "bun run scripts/publish.ts"
   },
   "devDependencies": {
     "bun-types": "latest",
