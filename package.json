@@ -1,5 +1,5 @@
 {
-  "name": "@hstore/workspace",
+  "name": "hstore-workspace",
   "private": true,
   "type": "module",
   "workspaces": [
