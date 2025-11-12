@@ -4,8 +4,11 @@ Functional, content-addressable storage for evolving JSON state. The repo is a B
 
 ## Workspace
 
-- `@hstore/core`: immutable DAG model, hashing utilities, persistence/materialization pipeline, and store factory.
-- `@hstore/memory-adapter`: pluggable in-memory persistence adapter that deduplicates nodes and keeps stored data deeply frozen.
+- `@hstore/core`: immutable DAG model, hashing utilities, persistence pipeline, and store factory.
+- `@hstore/memory-adapter`: in-memory storage adapter ideal for tests and ephemeral caches.
+- `@hstore/leveldb-adapter`: persistent adapter built on LevelDB.
+- `@hstore/cascade-adapter`: write-through multi-layer cache that composes multiple adapters.
+- `@hstore/redis-adapter`: Redis-backed adapter using `@redis/client`.
 
 ## Quick Start
 
@@ -24,27 +27,40 @@ bun run test
 
 Each package exposes standard scripts:
 
-- `bun run --filter=@hstore/core|@hstore/memory-adapter lint`
-- `bun run --filter=@hstore/core|@hstore/memory-adapter test`
-- `bun run --filter=@hstore/core|@hstore/memory-adapter build` (project references ready, primarily for publishing workflows)
+- `bun run --filter=@hstore/<package> lint`
+- `bun run --filter=@hstore/<package> test`
+- `bun run --filter=@hstore/<package> build`
 
 ## Using the Store
 
 ```ts
 import { createStore } from "@hstore/core";
 import { createMemoryAdapter } from "@hstore/memory-adapter";
-import { sha256 } from "./hash"; // any async/ sync (Uint8Array) => string hash fn
+import { createHash } from "crypto";
+import { z } from "zod";
 
-const store = createStore({
+const sha256 = (input: Uint8Array) =>
+  createHash("sha256").update(input).digest("hex");
+
+const store = await createStore({
   hashFn: sha256,
-  adapter: createMemoryAdapter()
+  adapter: createMemoryAdapter(),
+  schema: z
+    .object({
+      profile: z.object({
+        name: z.string(),
+        roles: z.array(z.string()),
+      }),
+    })
+    .strict(),
 });
 
-const { rootHash } = await store.persist({
-  profile: { name: "Ada Lovelace", roles: ["analyst", "programmer"] }
+const version = await store.commit({
+  profile: { name: "Ada Lovelace", roles: ["analyst", "programmer"] },
 });
 
-const { value } = await store.materialize(rootHash);
+const fetched = await store.get(version.hash);
+console.log(fetched?.value.profile.name); // "Ada Lovelace"
 ```
 
 ### Why DAG Nodes?
@@ -56,7 +72,7 @@ const { value } = await store.materialize(rootHash);
 ## Extending
 
 - **Hashing:** provide any `HashFn` (synchronous or asynchronous) when creating the store.
-- **Adapters:** implement the `StorageAdapter` interface to persist nodes to alternative backends (files, KV, etc.).
+- **Adapters:** implement the `StorageAdapter` interface or compose existing adapters like LevelDB, Redis, or cascade layers.
 
 ## Development Notes
 
