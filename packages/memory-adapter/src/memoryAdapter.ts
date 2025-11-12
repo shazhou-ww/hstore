@@ -1,4 +1,4 @@
-import type { Hash, StorageAdapter, StoredBlock } from "@hstore/core";
+import type { Hash, StorageAdapter, StoredBlock } from "@hstore/core.legacy";
 
 export type MemoryAdapterOptions = Readonly<{
   seed?: Iterable<StoredBlock>;

@@ -19,7 +19,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hstore/core": "workspace:*"
+    "@hstore/core.legacy": "workspace:*"
   }
 }
 
