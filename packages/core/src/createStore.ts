@@ -1,9 +1,12 @@
-import { createHasher, deserializeNode, serializeNode } from "./createHasher";
+import {
+  createHasher,
+  deserializeNode,
+  serializeCanonicalPrimitive
+} from "./createHasher";
 import { createImmutableMaterializer } from "./materialize";
 import { persistJsonValue, type PersistContext } from "./persist";
 import type { Hash } from "./types/hash";
 import type { JsonObject, JsonValue } from "./types/json";
-import type { PrimitiveNode } from "./types/node";
 import type {
   CreateStore,
   CreateStoreOptions,
@@ -29,11 +32,6 @@ type FrozenMetadata = FrozenJson<JsonObject> &
 
 const isFrozenMetadata = (value: FrozenJson<JsonValue>): value is FrozenMetadata =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-const createPrimitiveNode = (value: string | null): PrimitiveNode => ({
-  kind: "primitive",
-  value
-});
 
 const readHead = async (context: PersistContext): Promise<Hash | null> => {
   const record = await context.adapter.read(HEAD_KEY);
@@ -65,7 +63,7 @@ const writeHead = async (
   context: PersistContext,
   hash: Hash
 ): Promise<void> => {
-  const bytes = serializeNode(createPrimitiveNode(hash));
+  const bytes = serializeCanonicalPrimitive(hash);
   await context.adapter.write({
     hash: HEAD_KEY,
     bytes

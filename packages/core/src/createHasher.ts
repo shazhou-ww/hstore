@@ -59,7 +59,7 @@ const canonicalizeNode = (node: HNode): CanonicalNode => {
 /**
  * Serializes a node into UTF-8 bytes of its canonical JSON representation.
  */
-export const serializeNode = (node: HNode): Uint8Array => {
+const serializeNode = (node: HNode): Uint8Array => {
   const canonical = canonicalizeNode(node);
   return serializeCanonical(canonical);
 };

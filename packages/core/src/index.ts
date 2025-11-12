@@ -27,11 +27,10 @@ export type {
   CreateStore
 } from "./types/store";
 export { createHasher } from "./createHasher";
-export { serializeNode, deserializeNode } from "./createHasher";
+export { deserializeNode } from "./createHasher";
 export { createStore } from "./createStore";
 export {
   persistJsonValue,
-  persistNode,
   type PersistContext,
   type PersistOutcome,
   type PersistHashHints

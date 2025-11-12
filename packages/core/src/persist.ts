@@ -1,8 +1,7 @@
 import {
   serializeCanonicalArray,
   serializeCanonicalObject,
-  serializeCanonicalPrimitive,
-  serializeNode
+  serializeCanonicalPrimitive
 } from "./createHasher";
 import type { Hash } from "./types/hash";
 import type { Hasher } from "./types/hasher";
@@ -12,9 +11,6 @@ import type {
   JsonPrimitive,
   JsonValue
 } from "./types/json";
-import type {
-  HNode,
-} from "./types/node";
 import type { StorageAdapter } from "./types/adapter";
 
 /**
@@ -241,17 +237,6 @@ const persistValue = (
   }
 
   return persistObject(value, cache, context);
-};
-
-/**
- * Stores a node into the adapter, avoiding duplicate writes when the hash already exists.
- */
-export const persistNode = async (
-  node: HNode,
-  context: PersistContext
-): Promise<PersistOutcome> => {
-  const bytes = serializeNode(node);
-  return persistBytes(bytes, context);
 };
 
 /**
