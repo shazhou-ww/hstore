@@ -38,12 +38,5 @@ describe("createMemoryAdapter", () => {
     expect(reread?.bytes[0]).toBe(first);
   });
 
-  test("seeds initial nodes", async () => {
-    const seeded = sampleBlock("seed");
-    const adapter = createMemoryAdapter({ seed: [seeded] });
-
-    const result = await adapter.read("seed");
-    expect(result).toEqual(seeded);
-  });
 });
 

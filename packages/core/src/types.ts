@@ -50,10 +50,10 @@ export type WriteBlock = (record: StoredBlock) => Promise<void>;
 /**
  * Storage adapter providing low-level block persistence.
  */
-export type StorageAdapter = Readonly<{
+export type StorageAdapter = {
   read: ReadBlock;
   write: WriteBlock;
-}>;
+};
 
 export type StateVersion<T extends JsonValue> = Readonly<{
   hash: Hash;

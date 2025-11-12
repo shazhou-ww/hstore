@@ -33,10 +33,7 @@ const createAdapterHarness = (): AdapterHarness => {
   };
 
   return {
-    adapter: {
-      read,
-      write,
-    },
+    adapter: { read, write },
     dump: () => new Map(memory),
     writes: () => writeCount,
     seed: (block) => {
