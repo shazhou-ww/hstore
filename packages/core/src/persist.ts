@@ -1,7 +1,9 @@
 import {
-  serializeCanonicalArray,
-  serializeCanonicalObject,
-  serializeCanonicalPrimitive
+  enumerateArray,
+  enumerateObject,
+  serializeArray,
+  serializeObject,
+  serializePrimitive
 } from "./createHasher";
 import type { Hash } from "./types/hash";
 import type { Hasher } from "./types/hasher";
@@ -102,7 +104,7 @@ const persistPrimitive = (
     }));
   }
 
-  const bytes = serializeCanonicalPrimitive(value);
+  const bytes = serializePrimitive(value);
   const outcome = persistBytes(bytes, context);
   cache.primitives.set(value, outcome);
   return outcome;
@@ -144,9 +146,12 @@ const persistCompositeArray = async (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
-  const children = await Promise.all(values.map((item) => persistValue(item, cache, context)));
+  const canonicalValues = enumerateArray(values);
+  const children = await Promise.all(
+    canonicalValues.map((item) => persistValue(item, cache, context))
+  );
   const hashes = children.map((child) => child.hash);
-  const bytes = serializeCanonicalArray(hashes);
+  const bytes = serializeArray(hashes);
   const current = await persistBytes(bytes, context);
   const writes = children.reduce((sum, child) => sum + child.writes, 0) + current.writes;
 
@@ -192,16 +197,15 @@ const persistCompositeObject = async (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
-  const keys = Object.keys(value).sort((left, right) => left.localeCompare(right));
   const children = await Promise.all(
-    keys.map(async (key) => ({
+    enumerateObject(value).map(async ([key, childValue]) => ({
       key,
-      child: await persistValue(value[key], cache, context)
+      child: await persistValue(childValue, cache, context)
     }))
   );
 
   const entries = children.map(({ key, child }) => ({ key, hash: child.hash }));
-  const bytes = serializeCanonicalObject(entries);
+  const bytes = serializeObject(entries);
   const current = await persistBytes(bytes, context);
   const writes =
     children.reduce((sum, { child }) => sum + child.writes, 0) + current.writes;

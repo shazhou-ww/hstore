@@ -64,20 +64,34 @@ const serializeNode = (node: HNode): Uint8Array => {
   return serializeCanonical(canonical);
 };
 
-export const serializeCanonicalPrimitive = (value: JsonPrimitive): Uint8Array =>
+export const serializePrimitive = (value: JsonPrimitive): Uint8Array =>
   serializeCanonical([canonicalKind.primitive, value]);
 
-export const serializeCanonicalArray = (
+export const serializeArray = (
   hashes: ReadonlyArray<Hash>
 ): Uint8Array => serializeCanonical([canonicalKind.array, [...hashes]]);
 
-export const serializeCanonicalObject = (
+export const serializeObject = (
   entries: ReadonlyArray<{ key: string; hash: Hash }>
 ): Uint8Array =>
   serializeCanonical([
     canonicalKind.object,
     entries.map((entry) => [entry.key, entry.hash] as const)
   ]);
+
+export const enumerateArray = (values: JsonArray): ReadonlyArray<JsonValue> => [
+  ...values
+];
+
+export const enumerateObject = (
+  value: JsonObject
+): ReadonlyArray<readonly [string, JsonValue]> => {
+  const keys = Object.keys(value).sort((left, right) =>
+    left.localeCompare(right)
+  );
+
+  return keys.map((key) => [key, value[key]] as const);
+};
 
 const toObjectEntries = (
   entries: ReadonlyArray<readonly [string, Hash]>

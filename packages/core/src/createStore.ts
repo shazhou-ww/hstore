@@ -1,7 +1,7 @@
 import {
   createHasher,
   deserializeNode,
-  serializeCanonicalPrimitive
+  serializePrimitive
 } from "./createHasher";
 import { createImmutableMaterializer } from "./materialize";
 import { persistJsonValue, type PersistContext } from "./persist";
@@ -63,7 +63,7 @@ const writeHead = async (
   context: PersistContext,
   hash: Hash
 ): Promise<void> => {
-  const bytes = serializeCanonicalPrimitive(hash);
+  const bytes = serializePrimitive(hash);
   await context.adapter.write({
     hash: HEAD_KEY,
     bytes
