@@ -9,6 +9,16 @@
         "typescript": "^5.6.3",
       },
     },
+    "packages/cascade-adapter": {
+      "name": "@hstore/cascade-adapter",
+      "version": "0.0.0",
+      "dependencies": {
+        "@hstore/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@hstore/memory-adapter": "workspace:*",
+      },
+    },
     "packages/core": {
       "name": "@hstore/core",
       "version": "0.0.0",
@@ -33,6 +43,8 @@
     },
   },
   "packages": {
+    "@hstore/cascade-adapter": ["@hstore/cascade-adapter@workspace:packages/cascade-adapter"],
+
     "@hstore/core": ["@hstore/core@workspace:packages/core"],
 
     "@hstore/leveldb-adapter": ["@hstore/leveldb-adapter@workspace:packages/leveldb-adapter"],
