@@ -4,16 +4,25 @@ import type { HNode, ObjectNode } from "./types/node";
 import type { StorageAdapter } from "./types/adapter";
 import type { MaterializeOptions, MaterializeResult } from "./types/store";
 
+/**
+ * Context shared across materialization steps, providing access to storage and the depth budget.
+ */
 type MaterializeContext = Readonly<{
   adapter: StorageAdapter;
   depthLimit: number;
 }>;
 
+/**
+ * Result of visiting a node, including the computed JSON value and the number of nodes reached.
+ */
 type VisitOutcome = Readonly<{
   value: JsonValue;
   visited: number;
 }>;
 
+/**
+ * Expands an array node into a JSON array, respecting the remaining depth budget.
+ */
 const asArrayValue = async (
   node: HNode,
   context: MaterializeContext,
@@ -39,6 +48,9 @@ const asArrayValue = async (
   return { value, visited };
 };
 
+/**
+ * Expands an object node into a JSON object, respecting the remaining depth budget.
+ */
 const asObjectValue = async (
   node: HNode,
   context: MaterializeContext,
@@ -81,6 +93,9 @@ const asObjectValue = async (
   return { value: value as JsonObject, visited };
 };
 
+/**
+ * Returns the primitive value stored in a primitive node.
+ */
 const asPrimitiveValue = (node: HNode): VisitOutcome => {
   if (node.kind !== "primitive") {
     throw new Error("Expected primitive node");
@@ -89,6 +104,9 @@ const asPrimitiveValue = (node: HNode): VisitOutcome => {
   return { value: node.value, visited: 1 };
 };
 
+/**
+ * Resolves a hash to its JSON value by traversing the underlying node structure.
+ */
 const materializeHash = async (
   hash: Hash,
   context: MaterializeContext,
@@ -115,6 +133,9 @@ const materializeHash = async (
   return asObjectValue(record.node, context, depth);
 };
 
+/**
+ * Converts materialization options into a numeric depth limit.
+ */
 const resolveDepthLimit = (options?: MaterializeOptions): number => {
   if (!options || options.limitDepth === undefined) {
     return Number.POSITIVE_INFINITY;
@@ -123,6 +144,9 @@ const resolveDepthLimit = (options?: MaterializeOptions): number => {
   return options.limitDepth;
 };
 
+/**
+ * Materializes a stored tree, returning the JSON value and the number of visited nodes.
+ */
 export const materialize = async (
   hash: Hash,
   adapter: StorageAdapter,

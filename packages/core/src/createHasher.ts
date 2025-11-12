@@ -9,6 +9,9 @@ import type {
 } from "./types/node";
 import type { JsonArray, JsonObject, JsonPrimitive, JsonValue } from "./types/json";
 
+/**
+ * Canonical representation of a node used for stable serialization prior to hashing.
+ */
 type CanonicalNode =
   | readonly ["primitive", JsonPrimitive]
   | readonly ["array", ReadonlyArray<Hash>]
@@ -16,6 +19,9 @@ type CanonicalNode =
 
 const textEncoder = new TextEncoder();
 
+/**
+ * Produces a canonical tuple-based structure from a node, ensuring deterministic ordering.
+ */
 const canonicalizeNode = (node: HNode): CanonicalNode => {
   if (node.kind === "primitive") {
     return ["primitive", node.value];
@@ -35,17 +41,29 @@ const canonicalizeNode = (node: HNode): CanonicalNode => {
   ];
 };
 
+/**
+ * Serializes a node into UTF-8 bytes of its canonical JSON representation.
+ */
 const serializeNode = (node: HNode): Uint8Array => {
   const canonical = canonicalizeNode(node);
   return textEncoder.encode(JSON.stringify(canonical));
 };
 
+/**
+ * Wraps a hash function to operate over nodes by first serializing them.
+ */
 const createHashNode = (hashFn: HashFn) => async (node: HNode): Promise<Hash> =>
   hashFn(serializeNode(node));
 
+/**
+ * Type guard determining whether a JSON value is a non-null object.
+ */
 const isJsonObject = (value: JsonValue): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Hashes an arbitrary JSON value by first converting it into nodes.
+ */
 const hashValueWith = async (
   value: JsonValue,
   hashNode: (node: HNode) => Promise<Hash>
@@ -69,11 +87,17 @@ const hashValueWith = async (
   return hashNode(await createObjectNode(value, hashNode));
 };
 
+/**
+ * Creates a primitive node from a JSON primitive value.
+ */
 const createPrimitiveNode = (value: JsonPrimitive): PrimitiveNode => ({
   kind: "primitive",
   value
 });
 
+/**
+ * Builds an array node by hashing each element using the supplied node hasher.
+ */
 const createArrayNode = async (
   values: JsonArray,
   hashNode: (node: HNode) => Promise<Hash>
@@ -91,6 +115,9 @@ const createArrayNode = async (
   };
 };
 
+/**
+ * Builds an object node by hashing each property value using the supplied node hasher.
+ */
 const createObjectNode = async (
   value: JsonObject,
   hashNode: (node: HNode) => Promise<Hash>
@@ -112,6 +139,9 @@ const createObjectNode = async (
   };
 };
 
+/**
+ * Creates a hasher capable of hashing HNodes and raw JSON values.
+ */
 export const createHasher = (hashFn: HashFn): Hasher => {
   const hashNode = createHashNode(hashFn);
   const hashValue = (value: JsonValue) => hashValueWith(value, hashNode);

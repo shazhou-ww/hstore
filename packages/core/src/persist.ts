@@ -10,25 +10,40 @@ import type {
 import type { StorageAdapter } from "./types/adapter";
 import type { PersistResult } from "./types/store";
 
+/**
+ * Internal result of persisting a node, containing its hash and number of writes performed.
+ */
 type PersistOutcome = Readonly<{
   hash: Hash;
   writes: number;
 }>;
 
+/**
+ * Shared dependencies required to persist nodes into storage.
+ */
 export type PersistContext = Readonly<{
   adapter: StorageAdapter;
   hasher: Hasher;
 }>;
 
+/**
+ * Type guard determining whether a JSON value is a non-null object.
+ */
 const isJsonObject = (value: JsonValue): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
+/**
+ * Per-persistence caching layer to deduplicate work across repeated structures.
+ */
 type PersistCache = Readonly<{
   primitives: Map<JsonPrimitive, Promise<PersistOutcome>>;
   arrays: WeakMap<JsonArray, Promise<PersistOutcome>>;
   objects: WeakMap<JsonObject, Promise<PersistOutcome>>;
 }>;
 
+/**
+ * Creates a new cache for tracking persisted values during a single operation.
+ */
 const createCache = (): PersistCache =>
   ({
     primitives: new Map(),
@@ -36,21 +51,33 @@ const createCache = (): PersistCache =>
     objects: new WeakMap()
   }) as const;
 
+/**
+ * Converts a JSON primitive into a primitive node.
+ */
 const toPrimitiveNode = (value: JsonPrimitive): PrimitiveNode => ({
   kind: "primitive",
   value
 });
 
+/**
+ * Converts element hashes into an array node.
+ */
 const toArrayNode = (elements: ReadonlyArray<Hash>): ArrayNode => ({
   kind: "array",
   elements
 });
 
+/**
+ * Converts key/hash pairs into an object node.
+ */
 const toObjectNode = (entries: ReadonlyArray<{ key: string; hash: Hash }>): ObjectNode => ({
   kind: "object",
   entries
 });
 
+/**
+ * Persists a primitive JSON value, leveraging cache hits when possible.
+ */
 const persistPrimitive = (
   value: JsonPrimitive,
   cache: PersistCache,
@@ -70,6 +97,9 @@ const persistPrimitive = (
   return outcome;
 };
 
+/**
+ * Persists an array JSON value, leveraging cache hits when possible.
+ */
 const persistArray = (
   values: JsonArray,
   cache: PersistCache,
@@ -89,6 +119,9 @@ const persistArray = (
   return outcome;
 };
 
+/**
+ * Persists an array by recursively persisting elements before storing the composed node.
+ */
 const persistCompositeArray = async (
   values: JsonArray,
   cache: PersistCache,
@@ -105,6 +138,9 @@ const persistCompositeArray = async (
   };
 };
 
+/**
+ * Persists a JSON object, leveraging cache hits when possible.
+ */
 const persistObject = (
   value: JsonObject,
   cache: PersistCache,
@@ -124,6 +160,9 @@ const persistObject = (
   return outcome;
 };
 
+/**
+ * Persists a JSON object by recursively persisting property values before storing the composed node.
+ */
 const persistCompositeObject = async (
   value: JsonObject,
   cache: PersistCache,
@@ -148,6 +187,9 @@ const persistCompositeObject = async (
   };
 };
 
+/**
+ * Persists an arbitrary JSON value by dispatching to the appropriate strategy.
+ */
 const persistValue = (
   value: JsonValue,
   cache: PersistCache,
@@ -172,6 +214,9 @@ const persistValue = (
   return persistObject(value, cache, context);
 };
 
+/**
+ * Stores a node into the adapter, avoiding duplicate writes when the hash already exists.
+ */
 export const persistNode = async (
   node: HNode,
   context: PersistContext
@@ -187,6 +232,9 @@ export const persistNode = async (
   return { hash, writes: 1 };
 };
 
+/**
+ * Persists a JSON value and reports the resulting root hash and number of nodes written.
+ */
 export const persistJsonValue = async (
   value: JsonValue,
   context: PersistContext
