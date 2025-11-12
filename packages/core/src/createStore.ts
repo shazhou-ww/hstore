@@ -2,14 +2,19 @@ import { TextDecoder, TextEncoder } from "util";
 
 import type {
   CreateStore,
+  CreateStoreOptions,
   FrozenJson,
   Hash,
   JsonValue,
   StateVersion,
-  CreateStoreOptions,
 } from "./types";
 import { createObjectStore } from "./objectStore";
 import { freezeJson } from "./internal";
+
+const HEAD_KEY: Hash = "__hstore_head__";
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 type VersionBlock = Readonly<{
   value: Hash;
@@ -17,23 +22,30 @@ type VersionBlock = Readonly<{
   timestamp: number;
 }>;
 
-const HEAD_KEY: Hash = "__hstore_head__";
+type HeadRecord = Readonly<{
+  head: Hash | null;
+}>;
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
+/**
+ * Encodes a version block to bytes for persistence.
+ */
 const encodeVersionBlock = (block: VersionBlock): Uint8Array =>
   encoder.encode(JSON.stringify(block));
 
 const decodeVersionBlock = (bytes: Uint8Array): VersionBlock =>
   JSON.parse(decoder.decode(bytes)) as VersionBlock;
 
+const toHeadRecord = (hash: Hash | null): HeadRecord => ({ head: hash });
+
+/**
+ * Serializes the head pointer record for storage.
+ */
 const encodeHead = (hash: Hash | null): Uint8Array =>
-  encoder.encode(JSON.stringify({ head: hash }));
+  encoder.encode(JSON.stringify(toHeadRecord(hash)));
 
 const decodeHead = (bytes: Uint8Array): Hash | null => {
   try {
-    const data = JSON.parse(decoder.decode(bytes)) as { head?: unknown };
+    const data = JSON.parse(decoder.decode(bytes)) as Partial<HeadRecord>;
     return typeof data.head === "string" ? data.head : null;
   } catch {
     return null;
@@ -65,21 +77,25 @@ export const createStore: CreateStore = async <T extends JsonValue>({
   const objectStore = createObjectStore({ adapter, hashFn });
   const versionCache = new Map<Hash, StateVersion<T>>();
 
-  let headMemo: Hash | null = (await (async () => {
-    const stored = await adapter.read(HEAD_KEY);
-    if (!stored) {
-      await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
-      return null;
-    }
+  let headMemo: Hash | null =
+    (await (async () => {
+      const stored = await adapter.read(HEAD_KEY);
+      if (!stored) {
+        await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
+        return null;
+      }
 
-    const decoded = decodeHead(stored.bytes);
-    if (decoded === null) {
-      await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
-    }
+      const decoded = decodeHead(stored.bytes);
+      if (decoded === null) {
+        await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(null) });
+      }
 
-    return decoded;
-  })()) ?? null;
+      return decoded;
+    })()) ?? null;
 
+  /**
+   * Caches a materialized version for quick retrieval.
+   */
   const rememberVersion = (
     hash: Hash,
     block: VersionBlock,
@@ -95,11 +111,17 @@ export const createStore: CreateStore = async <T extends JsonValue>({
     return version;
   };
 
+  /**
+   * Persists the head pointer and memoises it locally.
+   */
   const persistHead = async (hash: Hash | null) => {
     await adapter.write({ hash: HEAD_KEY, bytes: encodeHead(hash) });
     headMemo = hash;
   };
 
+  /**
+   * Materializes a version by hash, consulting the adapter when needed.
+   */
   const loadVersion = async (hash: Hash): Promise<StateVersion<T> | null> => {
     const cached = versionCache.get(hash);
     if (cached) {
@@ -124,6 +146,9 @@ export const createStore: CreateStore = async <T extends JsonValue>({
     return rememberVersion(hash, parsed, value as FrozenJson<T>);
   };
 
+  /**
+   * Persists a version block and caches the resolved state value.
+   */
   const writeVersion = async (
     block: VersionBlock,
     value: FrozenJson<T>
@@ -138,17 +163,21 @@ export const createStore: CreateStore = async <T extends JsonValue>({
     return rememberVersion(hash, block, value);
   };
 
-  const head = async (): Promise<StateVersion<T> | null> => {
-    const current = headMemo;
-    if (!current) {
-      return null;
-    }
+  /**
+   * Returns the latest committed version or null when empty.
+   */
+  const head = async (): Promise<StateVersion<T> | null> =>
+    headMemo ? await loadVersion(headMemo) : null;
 
-    return loadVersion(current);
-  };
+  /**
+   * Retrieves a specific version by its hash.
+   */
+  const get = (hash: Hash): Promise<StateVersion<T> | null> =>
+    loadVersion(hash);
 
-  const get = (hash: Hash): Promise<StateVersion<T> | null> => loadVersion(hash);
-
+  /**
+   * Validates input against the schema and writes a new immutable version.
+   */
   const commit = async (input: T): Promise<StateVersion<T>> => {
     const parsed = await schema.parseAsync(input);
     const valueHash = await objectStore.write(parsed);
@@ -176,4 +205,3 @@ export const createStore: CreateStore = async <T extends JsonValue>({
     head,
   };
 };
-

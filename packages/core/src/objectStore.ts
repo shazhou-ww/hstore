@@ -16,11 +16,23 @@ import {
   sortObjectEntries,
 } from "./internal";
 
+/**
+ * CAS-backed read/write surface on JSON values.
+ */
 export type ObjectStore = Readonly<{
   read(hash: Hash): Promise<JsonValue | undefined>;
   write(value: JsonValue): Promise<Hash>;
 }>;
 
+type JsonEntry = readonly [string, JsonValue];
+type JsonEntryList = ReadonlyArray<JsonEntry>;
+type ChildHashList = ReadonlyArray<Hash>;
+type HashedEntry = readonly [string, Hash];
+type HashedEntryList = ReadonlyArray<HashedEntry>;
+
+/**
+ * Constructs an `ObjectStore` that reuses hashes for identical JSON nodes.
+ */
 export const createObjectStore = ({
   adapter,
   hashFn,
@@ -44,7 +56,9 @@ export const createObjectStore = ({
   const hintFor = (value: JsonValue): Hash | undefined =>
     isJsonPrimitive(value) ? primitiveHints.get(value) : objectHints.get(value as object);
 
-  const materialize = async (node: HNode): Promise<FrozenJson<JsonValue> | undefined> => {
+  const materialize = async (
+    node: HNode
+  ): Promise<FrozenJson<JsonValue> | undefined> => {
     const [tag, payload] = node;
 
     if (tag === 0) {
@@ -52,7 +66,7 @@ export const createObjectStore = ({
     }
 
     if (tag === 1) {
-      const childHashes = payload as readonly Hash[];
+      const childHashes = payload as ChildHashList;
       const values: JsonValue[] = [];
       for (const childHash of childHashes) {
         const childValue = await read(childHash);
@@ -65,8 +79,8 @@ export const createObjectStore = ({
       return freezeJson(values as JsonValue);
     }
 
-    const entries = payload as readonly (readonly [string, Hash])[];
-    const pairs: Array<readonly [string, JsonValue]> = [];
+    const entries = payload as HashedEntryList;
+    const pairs: JsonEntry[] = [];
     for (const [key, childHash] of entries) {
       const childValue = await read(childHash);
       if (childValue === undefined) {
@@ -78,6 +92,9 @@ export const createObjectStore = ({
     return freezeJson(Object.fromEntries(pairs) as JsonObject);
   };
 
+  /**
+   * Loads the JSON value for a hash, hydrating from adapter when needed.
+   */
   const read = async (hash: Hash): Promise<JsonValue | undefined> => {
     const cached = hashToValue.get(hash);
     if (cached !== undefined) {
@@ -99,6 +116,9 @@ export const createObjectStore = ({
     return value;
   };
 
+  /**
+   * Persists the value (already frozen) and returns its stable hash.
+   */
   const writeFrozen = async (value: JsonValue): Promise<Hash> => {
     const existing = hintFor(value);
     if (existing) {
@@ -114,10 +134,10 @@ export const createObjectStore = ({
       node = [1, childHashes];
     } else {
       const entries = sortObjectEntries(
-        Object.entries(value as JsonObject) as Array<readonly [string, JsonValue]>
+        Object.entries(value as JsonObject) as JsonEntryList
       );
 
-      const hashedEntries: Array<readonly [string, Hash]> = [];
+      const hashedEntries: HashedEntry[] = [];
       for (const [key, childValue] of entries) {
         const childHash = await writeFrozen(childValue);
         hashedEntries.push([key, childHash]);
@@ -134,7 +154,11 @@ export const createObjectStore = ({
     return hash;
   };
 
-  const write = async (value: JsonValue): Promise<Hash> => writeFrozen(freezeJson(value));
+  /**
+   * Writes any JSON value, freezing and deduplicating before persisting.
+   */
+  const write = async (value: JsonValue): Promise<Hash> =>
+    writeFrozen(freezeJson(value));
 
   return {
     read,
