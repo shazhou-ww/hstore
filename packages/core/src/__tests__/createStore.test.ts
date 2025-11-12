@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createHash } from "crypto";
 import { z } from "zod";
+import { TextDecoder, TextEncoder } from "util";
 
 import { createStore } from "../createStore";
 import type {
@@ -14,6 +15,7 @@ type AdapterHarness = Readonly<{
   adapter: StorageAdapter;
   dump: () => ReadonlyMap<Hash, StoredBlock>;
   writes: () => number;
+  seed: (block: StoredBlock) => void;
 }>;
 
 const sha256: HashFn = (input) =>
@@ -37,6 +39,9 @@ const createAdapterHarness = (): AdapterHarness => {
     },
     dump: () => new Map(memory),
     writes: () => writeCount,
+    seed: (block) => {
+      memory.set(block.hash, block);
+    },
   };
 };
 
@@ -47,6 +52,10 @@ const schema = z
     details: z.object({ nested: z.boolean() }),
   })
   .strict();
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+const HEAD_KEY = "__hstore_head__" as Hash;
 
 describe("createStore", () => {
   test("commit returns frozen versions and updates head", async () => {
@@ -160,6 +169,90 @@ describe("createStore", () => {
     const blocks = harness.dump();
     expect(blocks.size).toBeGreaterThan(0);
     expect(blocks.has("__hstore_head__")).toBe(true);
+  });
+
+  test("initializes head record when adapter is empty", async () => {
+    const harness = createAdapterHarness();
+    expect(harness.writes()).toBe(0);
+
+    await createStore({
+      hashFn: sha256,
+      adapter: harness.adapter,
+      schema,
+    });
+
+    expect(harness.writes()).toBe(1);
+    const headRecord = harness.dump().get(HEAD_KEY);
+    expect(headRecord).toBeDefined();
+    const parsed = JSON.parse(decoder.decode(headRecord!.bytes)) as {
+      head?: unknown;
+    };
+    expect(parsed).toEqual({ head: null });
+  });
+
+  test("repairs a corrupted head record", async () => {
+    const harness = createAdapterHarness();
+    harness.seed({
+      hash: HEAD_KEY,
+      bytes: encoder.encode(JSON.stringify({ head: 42 })),
+    });
+
+    const before = harness.writes();
+    await createStore({
+      hashFn: sha256,
+      adapter: harness.adapter,
+      schema,
+    });
+
+    const headRecord = harness.dump().get(HEAD_KEY);
+    expect(headRecord).toBeDefined();
+    const parsed = JSON.parse(decoder.decode(headRecord!.bytes)) as {
+      head?: unknown;
+    };
+    expect(parsed).toEqual({ head: null });
+    expect(harness.writes()).toBe(before + 1);
+  });
+
+  test("returns null for malformed version blocks", async () => {
+    const harness = createAdapterHarness();
+    const store = await createStore({
+      hashFn: sha256,
+      adapter: harness.adapter,
+      schema,
+    });
+
+    const malformedHash = "malformed" as Hash;
+    harness.seed({
+      hash: malformedHash,
+      bytes: encoder.encode(JSON.stringify({ value: 1 })),
+    });
+
+    const result = await store.get(malformedHash);
+    expect(result).toBeNull();
+  });
+
+  test("returns null when version references missing value node", async () => {
+    const harness = createAdapterHarness();
+    const store = await createStore({
+      hashFn: sha256,
+      adapter: harness.adapter,
+      schema,
+    });
+
+    const versionHash = "dangling-version" as Hash;
+    harness.seed({
+      hash: versionHash,
+      bytes: encoder.encode(
+        JSON.stringify({
+          value: "missing-value",
+          previous: null,
+          timestamp: Date.now(),
+        })
+      ),
+    });
+
+    const result = await store.get(versionHash);
+    expect(result).toBeNull();
   });
 });
 
