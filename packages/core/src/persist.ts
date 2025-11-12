@@ -1,6 +1,4 @@
 import {
-  canonicalArrayValues,
-  canonicalObjectEntries,
   serializeArray,
   serializeObject,
   serializePrimitive
@@ -146,9 +144,8 @@ const persistCompositeArray = async (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
-  const canonicalValues = canonicalArrayValues(values);
   const children = await Promise.all(
-    canonicalValues.map((item) => persistValue(item, cache, context))
+    values.map((item) => persistValue(item, cache, context))
   );
   const hashes = children.map((child) => child.hash);
   const bytes = serializeArray(hashes);
@@ -197,11 +194,13 @@ const persistCompositeObject = async (
   cache: PersistCache,
   context: PersistContext
 ): Promise<PersistOutcome> => {
+  const sortedEntries = Object.entries(value).sort((left, right) => left[0].localeCompare(right[0]));
   const children = await Promise.all(
-    canonicalObjectEntries(value).map(async ([key, childValue]) => ({
-      key,
-      child: await persistValue(childValue, cache, context)
-    }))
+    sortedEntries
+      .map(async ([key, childValue]) => ({
+        key,
+        child: await persistValue(childValue, cache, context),
+      }))
   );
 
   const entries = children.map(({ key, child }) => ({ key, hash: child.hash }));

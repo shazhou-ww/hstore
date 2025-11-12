@@ -79,28 +79,6 @@ export const serializeObject = (
   entries.map((entry) => [entry.key, entry.hash] as const)
   ]);
 
-const enumerateArray = (values: JsonArray): ReadonlyArray<JsonValue> => [
-  ...values
-];
-
-export const canonicalArrayValues = (
-  values: JsonArray
-): ReadonlyArray<JsonValue> => enumerateArray(values);
-
-const enumerateObject = (
-  value: JsonObject
-): ReadonlyArray<readonly [string, JsonValue]> => {
-  const keys = Object.keys(value).sort((left, right) =>
-    left.localeCompare(right)
-  );
-
-  return keys.map((key) => [key, value[key]] as const);
-};
-
-export const canonicalObjectEntries = (
-  value: JsonObject
-): ReadonlyArray<readonly [string, JsonValue]> => enumerateObject(value);
-
 const toObjectEntries = (
   entries: ReadonlyArray<readonly [string, Hash]>
 ): ReadonlyArray<{ key: string; hash: Hash }> =>
