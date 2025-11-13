@@ -66,6 +66,45 @@ type HStore<T> = Readonly<{
 }>;
 ```
 
+### `freezeJson(value)`
+
+Deeply freezes JSON values to guarantee immutability. Returns a frozen copy of the input value where all nested objects and arrays are recursively frozen.
+
+```ts
+import { freezeJson } from "@hstore/core";
+
+const data = { name: "Alice", tags: ["dev", "lead"] };
+const frozen = freezeJson(data);
+
+// frozen is immutable - all properties are readonly
+// frozen.name = "Bob"; // TypeScript error
+// frozen.tags.push("manager"); // Runtime error
+```
+
+### `FrozenJson<T>`
+
+A recursive type that transforms a JSON value type into its fully frozen/readonly equivalent.
+
+```ts
+import type { FrozenJson } from "@hstore/core";
+
+type MyData = {
+  id: number;
+  items: string[];
+  metadata: { version: number };
+};
+
+type FrozenMyData = FrozenJson<MyData>;
+// Result:
+// {
+//   readonly id: number;
+//   readonly items: ReadonlyArray<string>;
+//   readonly metadata: {
+//     readonly version: number;
+//   };
+// }
+```
+
 ### `StorageAdapter`
 
 Adapters persist raw blocks encoded as `Uint8Array` and keyed by hash.

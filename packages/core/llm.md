@@ -59,3 +59,40 @@ const store = await createStore({
 await store.commit("hello cascade");
 ```
 
+## Utilities
+
+The package exports utility functions for working with immutable JSON values:
+
+### `freezeJson(value)`
+
+Deeply freezes JSON values to guarantee immutability:
+
+```ts
+import { freezeJson } from "@hstore/core";
+
+const data = { name: "Alice", tags: ["dev", "lead"] };
+const frozen = freezeJson(data);
+
+// frozen is now immutable - all nested objects/arrays are frozen
+// Attempts to mutate will throw in strict mode or fail silently
+```
+
+### `FrozenJson<T>`
+
+A recursive type that transforms a JSON value into its fully frozen equivalent:
+
+```ts
+import type { FrozenJson } from "@hstore/core";
+
+type MyData = {
+  id: number;
+  items: string[];
+  metadata: { version: number };
+};
+
+type Frozen = FrozenJson<MyData>;
+// Result: all properties are readonly, arrays are ReadonlyArray
+```
+
+Use `freezeJson` when you need to ensure runtime immutability, and `FrozenJson` when you want TypeScript to enforce immutability at compile time. Store versions always return `FrozenJson<T>` values.
+

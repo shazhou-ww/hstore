@@ -4,11 +4,11 @@ Functional, content-addressable storage for evolving JSON state. The repo is a B
 
 ## Workspace
 
-- `@hstore/core`: immutable DAG model, hashing utilities, persistence pipeline, and store factory.
-- `@hstore/memory-adapter`: in-memory storage adapter ideal for tests and ephemeral caches.
-- `@hstore/leveldb-adapter`: persistent adapter built on LevelDB.
-- `@hstore/cascade-adapter`: write-through multi-layer cache that composes multiple adapters.
-- `@hstore/redis-adapter`: Redis-backed adapter using `@redis/client`.
+- `@hstore/core`: immutable DAG model, hashing utilities, persistence pipeline, and store factory. ([README](./packages/core/README.md))
+- `@hstore/memory-adapter`: in-memory storage adapter ideal for tests and ephemeral caches. ([README](./packages/memory-adapter/README.md))
+- `@hstore/leveldb-adapter`: persistent adapter built on LevelDB. ([README](./packages/leveldb-adapter/README.md))
+- `@hstore/cascade-adapter`: write-through multi-layer cache that composes multiple adapters. ([README](./packages/cascade-adapter/README.md))
+- `@hstore/redis-adapter`: Redis-backed adapter using `@redis/client`. ([README](./packages/redis-adapter/README.md))
 
 ## Quick Start
 
