@@ -1,6 +1,6 @@
 {
   "name": "@hstore/redis-adapter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": false,
   "type": "module",
   "files": [
@@ -24,6 +24,6 @@
     "@redis/client": "^1.5.11"
   },
   "devDependencies": {
-    "@hstore/memory-adapter": "workspace:*"
+    "@hstore/memory-adapter": "^0.1.2"
   }
 }
