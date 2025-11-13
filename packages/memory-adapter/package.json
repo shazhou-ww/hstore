@@ -1,6 +1,6 @@
 {
   "name": "@hstore/memory-adapter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "src"
@@ -19,7 +19,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hstore/core": "workspace:*"
+    "@hstore/core": "^0.1.2"
   }
 }
-

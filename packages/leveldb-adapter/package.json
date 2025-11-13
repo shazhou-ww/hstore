@@ -1,6 +1,6 @@
 {
   "name": "@hstore/leveldb-adapter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "files": [
@@ -20,8 +20,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hstore/core": "workspace:*",
+    "@hstore/core": "^0.1.2",
     "classic-level": "^3.0.0"
   }
 }
-
