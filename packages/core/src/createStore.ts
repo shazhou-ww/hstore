@@ -9,7 +9,7 @@ import type {
   StateVersion,
 } from "./types";
 import { createObjectStore } from "./objectStore";
-import { freezeJson } from "./internal";
+import { freezeJson } from "./utils";
 
 const HEAD_KEY: Hash = "__hstore_head__";
 

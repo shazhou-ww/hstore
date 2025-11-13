@@ -1,4 +1,5 @@
 export { createStore } from "./createStore";
+export { freezeJson } from "./utils";
 export type {
   Hash,
   HashFn,
@@ -10,4 +11,5 @@ export type {
   StateVersion,
   CreateStoreOptions,
   WriteBlock,
+  FrozenJson,
 } from "./types";

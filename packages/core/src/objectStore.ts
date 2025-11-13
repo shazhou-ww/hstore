@@ -7,14 +7,8 @@ import type {
   JsonValue,
   StorageAdapter,
 } from "./types";
-import {
-  deserializeHNode,
-  freezeJson,
-  HNode,
-  isJsonPrimitive,
-  serializeHNode,
-  sortObjectEntries,
-} from "./internal";
+import { deserializeHNode, HNode, serializeHNode } from "./hNode";
+import { freezeJson, isJsonPrimitive, sortObjectEntries } from "./utils";
 
 /**
  * CAS-backed read/write surface on JSON values.
