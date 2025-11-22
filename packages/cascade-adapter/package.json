@@ -1,6 +1,6 @@
 {
   "name": "@hstore/cascade-adapter",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "files": [
@@ -20,9 +20,9 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@hstore/core": "^0.1.2"
+    "@hstore/core": "^0.2.0"
   },
   "devDependencies": {
-    "@hstore/memory-adapter": "^0.1.2"
+    "@hstore/memory-adapter": "^0.2.0"
   }
 }
